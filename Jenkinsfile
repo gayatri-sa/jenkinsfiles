@@ -30,7 +30,7 @@ pipeline {
                 unstash 'samplejava'
                 sh "ls -l ${env.WORKSPACE}"
                 // sh 'mvn -Dmaven.repo.local=/home/jenkins/.m2 clean package'
-                sh 'mvn clean package'
+                sh 'mvn clean package --no-transfer-progress'
             }
             post {
                 success {
