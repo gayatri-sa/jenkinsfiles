@@ -26,9 +26,9 @@ pipeline {
             //     JAVA_TOOL_OPTIONS = '-Duser.home=/var/maven'
             // }
             steps {
-                sh 'rm -fr /home/jenkins/workspace/Sample/*'
+                sh "rm -fr ${env.WORKSPACE}/*"
                 unstash 'samplejava'
-                sh 'ls -l /home/jenkins/workspace/Sample'
+                sh "ls -l ${env.WORKSPACE}"
                 // sh 'mvn -Dmaven.repo.local=/home/jenkins/.m2 clean package'
                 sh 'mvn clean package'
             }
@@ -48,7 +48,7 @@ pipeline {
                 dockerImage = ''
             }
             steps {
-                sh "find /home/jenkins/workspace/Sample -mindepth 1 -depth -exec rm -rf {} ';'"
+                sh "find ${env.WORKSPACE} -mindepth 1 -depth -exec rm -rf {} ';'"
                 git branch: 'master', url: 'https://github.com/gayatri-sa/jenkins-pipeline'
                 sh 'tree ./'
                 unstash 'app'
