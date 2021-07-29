@@ -1,0 +1,83 @@
+pipeline {
+    agent any
+    stages {
+        stage('Clone Project') {
+            steps {
+                git branch: 'master', url: 'https://github.com/gayatri-sa/samplejavawithjunit'
+                stash name:'samplejava', includes:'**/*'
+            }
+        }
+        stage('Build & Test Project') {
+            agent {
+                docker {
+                    image 'maven:3.8.1-adoptopenjdk-11'
+                    label 'docker'
+                    // args  "-v /home/jenkins/.m2:/home/jenkins/maven/.m2"
+                }
+            }
+            // environment {
+            //     JAVA_TOOL_OPTIONS = "-Duser.home=/home/jenkins/maven"
+            // }
+            steps {
+                sh 'rm -fr ./*'
+                unstash 'samplejava'
+                sh 'mvn clean test package --no-transfer-progress'
+            }
+            post {
+                failure {
+                    script {
+                        def summary = junit testResults: "**/surefire-reports/*.xml"
+                        emailext (
+                            subject: "Jenkins Build ${currentBuild.currentResult}: Job ${env.JOB_NAME}",
+                            body: "${currentBuild.currentResult}: Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}\n More info at: ${env.BUILD_URL}\n *Test Summary* - ${summary.totalCount}, Failures: ${summary.failCount}, Skipped: ${summary.skipCount}, Passed: ${summary.passCount}",
+                            recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'RequesterRecipientProvider']]
+                        )
+                            
+                    }
+                }
+                success {
+                    stash includes: '**/target/*.war', name: 'app' 
+                }
+            }
+        }
+        stage('Build and Push Docker Image') {
+            agent {
+                label 'docker'
+            }
+            environment {
+                registry = "gayatrisa/samplejava-pipeline-test"
+                registryCredential = 'dockerhub'
+                dockerImage = ''
+            }
+            steps {
+                sh "find ${env.WORKSPACE} -mindepth 1 -depth -exec rm -rf {} ';'"
+                git branch: 'master', url: 'https://github.com/gayatri-sa/jenkins-pipeline'
+                unstash 'app'
+                sh 'tree ./'
+                script {
+                  dockerImage = docker.build(registry + ":$BUILD_NUMBER", "-f ./tomcat/Dockerfile-junit ./")
+                  docker.withRegistry( '', registryCredential ) {
+                    dockerImage.push()
+                  }
+                }
+                sh "docker rmi $registry:$BUILD_NUMBER"
+            }
+        }
+        stage('Deploy New Image') {
+            agent {
+                docker {
+                    image 'gayatrisa/ansible:ubuntu-20.04'
+                    label 'docker'
+                    args  "-v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker -u root"
+                }
+            }
+            steps {
+                sh "find ${env.WORKSPACE} -mindepth 1 -depth -exec rm -rf {} ';'"
+                git branch: 'master', url: 'https://github.com/gayatri-sa/jenkins-pipeline'
+                sh 'ls -la ./'
+                sh 'ls -la /etc/ansible'
+                sh 'ansible-playbook ansible/create-container-junit.yaml'
+            }
+        }
+    }
+}
